@@ -794,8 +794,19 @@ function App() {
               Output width
               <input
                 type="number"
+                min={256}
+                max={1920}
                 value={config.output_width}
-                onChange={(event) => updateNumeric("output_width", Number.parseInt(event.target.value, 10))}
+                onChange={(event) => {
+                  const value = Number.parseInt(event.target.value, 10);
+                  if (!Number.isFinite(value)) {
+                    return;
+                  }
+                  setConfig({ ...config, output_width: value });
+                  if (value >= 256 && value <= 1920) {
+                    queueConfigPatch({ output_width: value });
+                  }
+                }}
               />
             </label>
 
@@ -803,8 +814,19 @@ function App() {
               Output height
               <input
                 type="number"
+                min={256}
+                max={1920}
                 value={config.output_height}
-                onChange={(event) => updateNumeric("output_height", Number.parseInt(event.target.value, 10))}
+                onChange={(event) => {
+                  const value = Number.parseInt(event.target.value, 10);
+                  if (!Number.isFinite(value)) {
+                    return;
+                  }
+                  setConfig({ ...config, output_height: value });
+                  if (value >= 256 && value <= 1920) {
+                    queueConfigPatch({ output_height: value });
+                  }
+                }}
               />
             </label>
 

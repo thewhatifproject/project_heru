@@ -4,8 +4,9 @@ import os
 from contextlib import asynccontextmanager
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import ValidationError
 
 from app.schemas import HealthResponse, WsMessage
 from app.services.session import SessionRegistry
@@ -54,7 +55,10 @@ async def get_session_config(session_id: str) -> dict:
 @app.put("/api/session/{session_id}/config")
 async def put_session_config(session_id: str, patch: dict) -> dict:
     session = await registry.get_or_create(session_id)
-    config = await session.update_config(patch)
+    try:
+        config = await session.update_config(patch)
+    except ValidationError as error:
+        raise HTTPException(status_code=422, detail=error.errors()) from error
     return {
         "revision": session.revision,
         "config": config.model_dump(),
@@ -88,7 +92,19 @@ async def realtime_socket(websocket: WebSocket, session_id: str) -> None:
                 continue
 
             if incoming.type == "config.update":
-                config = await session.update_config(incoming.payload)
+                try:
+                    config = await session.update_config(incoming.payload)
+                except ValidationError as error:
+                    await websocket.send_json(
+                        {
+                            "type": "error",
+                            "payload": {
+                                "message": "Invalid config update",
+                                "details": error.errors(),
+                            },
+                        }
+                    )
+                    continue
                 await websocket.send_json(
                     {
                         "type": "config.current",
