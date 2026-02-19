@@ -11,21 +11,20 @@ ssh -p <SSH_PORT> <SSH_USER>@<SSH_HOST>
 ## 1) Clone repo and run bootstrap
 
 ```bash
-git clone <your-fork-url> cam2inference
-cd cam2inference
+git clone <your-fork-url> project-heru
+cd project-heru
 ./scripts/setup_h100_runtime.sh
 ```
 
 Notes:
 
-- Use `HF_TOKEN` only if Hugging Face requires authentication for model/checkpoint downloads.
 - Optional: `DOWNLOAD_WAN_14B=1` if you want 14B assets now.
 
 ## 2) Activate env and export core path
 
 ```bash
 source ~/miniconda3/etc/profile.d/conda.sh
-conda activate cam2inf
+conda activate heru
 export STREAMDIFFUSIONV2_PATH=$(pwd)/core/streamdiffusionv2
 ```
 
@@ -33,16 +32,34 @@ export STREAMDIFFUSIONV2_PATH=$(pwd)/core/streamdiffusionv2
 
 ```bash
 cd apps/backend
-python scripts/smoke_realtime.py --frames 10 --model wan-1.3b --steps 2 --require-core --save /tmp/cam2inf-smoke.jpg
+python scripts/smoke_realtime.py --frames 10 --model wan-1.3b --steps 2 --require-core --save /tmp/heru-smoke.jpg
 ```
 
 Expected:
 
 - Initial mode may be `core-imported`.
 - Then mode should become `core-warmup` and finally `core-runtime-active`.
-- Output file exists at `/tmp/cam2inf-smoke.jpg`.
+- Output file exists at `/tmp/heru-smoke.jpg`.
 
 If it stays `mock`, inspect `status.error` shown per frame.
+
+### Optional: distributed smoke (2 GPUs)
+
+```bash
+python scripts/smoke_realtime.py \
+  --frames 12 \
+  --model wan-1.3b \
+  --topology distributed \
+  --world-size 2 \
+  --steps 2 \
+  --require-core \
+  --save /tmp/heru-smoke-distributed.jpg
+```
+
+Expected runtime mode progression:
+
+- `core-distributed-warmup`
+- `core-distributed-active`
 
 ## 4) Launch backend API
 

@@ -375,7 +375,7 @@ function App() {
     <div className="page-shell">
       <header className="topbar animated fade-up">
         <div>
-          <h1>Cam2Inference DJ Console</h1>
+          <h1>Project Heru</h1>
           <p>Realtime cam-to-inference control surface for prompt-dominant generation.</p>
         </div>
 

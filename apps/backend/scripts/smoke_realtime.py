@@ -14,6 +14,14 @@ from app.pipeline.streamdiffusion_adapter import StreamDiffusionV2Adapter
 from app.pipeline.types import ConditioningSignals
 
 
+CORE_RUNTIME_MODES = {
+    "core-warmup",
+    "core-runtime-active",
+    "core-distributed-warmup",
+    "core-distributed-active",
+}
+
+
 def build_frame(width: int, height: int, tick: int) -> Image.Image:
     """Generate a deterministic synthetic frame with visible motion."""
     x = np.linspace(0.0, 1.0, width, dtype=np.float32)
@@ -36,6 +44,11 @@ def main() -> int:
     parser.add_argument("--width", type=int, default=768, help="Output width")
     parser.add_argument("--height", type=int, default=768, help="Output height")
     parser.add_argument("--model", choices=["wan-1.3b", "wan-14b"], default="wan-1.3b")
+    parser.add_argument("--topology", choices=["single", "distributed"], default="single")
+    parser.add_argument("--world-size", type=int, default=2, help="Used only when --topology=distributed")
+    parser.add_argument("--master-addr", type=str, default="127.0.0.1")
+    parser.add_argument("--master-port", type=int, default=29501)
+    parser.add_argument("--timeout-s", type=float, default=180.0)
     parser.add_argument("--steps", type=int, default=2, help="Inference steps")
     parser.add_argument("--save", type=str, default="", help="Optional path for last output image")
     parser.add_argument(
@@ -51,6 +64,11 @@ def main() -> int:
 
     config = RuntimeConfig(
         model_variant=args.model,
+        inference_topology=args.topology,
+        distributed_world_size=args.world_size,
+        distributed_master_addr=args.master_addr,
+        distributed_master_port=args.master_port,
+        distributed_command_timeout_s=args.timeout_s,
         inference_steps=args.steps,
         output_width=args.width,
         output_height=args.height,
@@ -78,7 +96,7 @@ def main() -> int:
         total_ms += elapsed_ms
 
         runtime_mode = str(adapter.runtime_status.get("mode"))
-        if runtime_mode in {"core-warmup", "core-runtime-active"}:
+        if runtime_mode in CORE_RUNTIME_MODES:
             saw_core_mode = True
 
         print(
@@ -98,7 +116,8 @@ def main() -> int:
         print(f"saved output: {output_path}")
 
     if args.require_core and not saw_core_mode:
-        print("ERROR: runtime never reached core-warmup/core-runtime-active", file=sys.stderr)
+        expected = ",".join(sorted(CORE_RUNTIME_MODES))
+        print(f"ERROR: runtime never reached any core mode ({expected})", file=sys.stderr)
         return 2
 
     return 0

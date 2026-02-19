@@ -19,6 +19,21 @@ class RuntimeConfig(BaseModel):
     negative_prompt: str = "blurry, low quality, beard, watermark"
     mode: Literal["performance", "balanced", "quality"] = "balanced"
     model_variant: Literal["wan-1.3b", "wan-14b"] = "wan-1.3b"
+    inference_topology: Literal["single", "distributed"] = Field(
+        default_factory=lambda: os.getenv("INFERENCE_TOPOLOGY", "single")
+    )
+    distributed_world_size: int = Field(
+        default_factory=lambda: int(os.getenv("DISTRIBUTED_WORLD_SIZE", "2")), ge=1, le=8
+    )
+    distributed_master_addr: str = Field(
+        default_factory=lambda: os.getenv("DISTRIBUTED_MASTER_ADDR", "127.0.0.1")
+    )
+    distributed_master_port: int = Field(
+        default_factory=lambda: int(os.getenv("DISTRIBUTED_MASTER_PORT", "29501")),
+        ge=1024,
+        le=65535,
+    )
+    distributed_command_timeout_s: float = Field(default=120.0, ge=5.0, le=600.0)
 
     prompt_dominance: float = Field(default=0.82, ge=0.0, le=1.0)
     guidance_scale: float = Field(default=6.5, ge=1.0, le=20.0)
@@ -49,6 +64,7 @@ DEFAULT_PRESETS: dict[str, RuntimeConfig] = {
         negative_prompt="beard, facial hair, blur, text, artifacts",
         mode="performance",
         model_variant="wan-1.3b",
+        inference_topology="single",
         inference_steps=2,
         prompt_dominance=0.86,
     ),
@@ -57,6 +73,7 @@ DEFAULT_PRESETS: dict[str, RuntimeConfig] = {
         negative_prompt="beard, moustache, blur, noisy background",
         mode="balanced",
         model_variant="wan-1.3b",
+        inference_topology="single",
         inference_steps=3,
         prompt_dominance=0.8,
     ),

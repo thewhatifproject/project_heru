@@ -6,6 +6,11 @@
 - CUDA-compatible Ubuntu image
 - open ports: `8000` (backend), optional `5173` (frontend dev)
 
+For distributed single-stream inference:
+
+- use a 2x GPU instance
+- set session config to `inference_topology=distributed` and `distributed_world_size=2`
+
 ## Steps
 
 1. Start instance and SSH in.
@@ -19,12 +24,12 @@
 ## Quick bootstrap
 
 ```bash
-cd <repo-root>
+cd project_heru
 ./scripts/setup_h100_runtime.sh
 
-conda activate cam2inf
-export STREAMDIFFUSIONV2_PATH=<repo-root>/core/streamdiffusionv2
-cd <repo-root>/apps/backend
+conda activate heru
+export STREAMDIFFUSIONV2_PATH=project_heru/core/streamdiffusionv2
+cd project_heru/apps/backend
 python -m app.main
 ```
 
@@ -41,6 +46,7 @@ python -m app.main
 - `model_variant=wan-1.3b`
 - `inference_steps=1..2`
 - `target_fps=30..45`
+- `inference_topology=distributed` (when 2 GPUs are available)
 
 ### Balanced
 

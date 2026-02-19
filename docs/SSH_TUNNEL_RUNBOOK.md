@@ -13,7 +13,7 @@ This is the recommended workflow when your inference backend runs on a remote VM
 ```bash
 ssh -p <SSH_PORT> <SSH_USER>@<SSH_HOST>
 source ~/miniconda3/etc/profile.d/conda.sh
-conda activate cam2inf
+conda activate heru
 export STREAMDIFFUSIONV2_PATH=<REMOTE_REPO_PATH>/core/streamdiffusionv2
 cd <REMOTE_REPO_PATH>/apps/backend
 python -m app.main
@@ -63,6 +63,14 @@ Expected mode progression:
 - `core-imported` (idle)
 - `core-warmup` (initial buffering)
 - `core-runtime-active` (live inference)
+
+To enable 2-GPU distributed inference for the same stream:
+
+```bash
+curl -s -X PUT http://127.0.0.1:8000/api/session/main/config \
+  -H 'Content-Type: application/json' \
+  -d '{"inference_topology":"distributed","distributed_world_size":2}'
+```
 
 ## Troubleshooting
 

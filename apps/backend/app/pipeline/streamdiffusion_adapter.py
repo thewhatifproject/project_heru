@@ -5,12 +5,14 @@ import os
 import random
 import sys
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 from PIL import Image, ImageEnhance, ImageFilter
 
 from app.config import RuntimeConfig
 from app.pipeline.causal_wan_runtime import CausalWanRealtimeRunner, RuntimeLoadError
+from app.pipeline.distributed_causal_wan_runtime import DistributedCausalWanRealtimeRunner
 from app.pipeline.types import ConditioningSignals
 
 
@@ -22,11 +24,12 @@ class StreamDiffusionV2Adapter:
     """
 
     def __init__(self) -> None:
-        self._stream_runtime: CausalWanRealtimeRunner | None = None
+        self._stream_runtime: Any | None = None
         self._runtime_mode = "mock"
         self._runtime_error: str | None = None
         self._runtime_path: str | None = None
         self._core_import_ready = False
+        self._runtime_topology = "single"
         self._bootstrap_runtime()
 
     def generate(
@@ -41,11 +44,24 @@ class StreamDiffusionV2Adapter:
         if self._core_import_ready:
             try:
                 core_path = Path(self._runtime_path) if self._runtime_path else self._resolve_core_path(None)
+                runner_class = (
+                    DistributedCausalWanRealtimeRunner
+                    if config.inference_topology == "distributed"
+                    else CausalWanRealtimeRunner
+                )
 
+                needs_rebuild = False
                 if self._stream_runtime is None:
-                    self._stream_runtime = CausalWanRealtimeRunner(core_path=core_path, config=config)
+                    needs_rebuild = True
+                elif self._runtime_topology != config.inference_topology:
+                    needs_rebuild = True
                 elif self._stream_runtime.requires_reload(config=config, core_path=core_path):
-                    self._stream_runtime = CausalWanRealtimeRunner(core_path=core_path, config=config)
+                    needs_rebuild = True
+
+                if needs_rebuild:
+                    self._teardown_runtime()
+                    self._stream_runtime = runner_class(core_path=core_path, config=config)
+                    self._runtime_topology = config.inference_topology
 
                 output = self._stream_runtime.process_frame(frame, config, conditioning)
                 self._runtime_mode = self._stream_runtime.mode
@@ -59,11 +75,11 @@ class StreamDiffusionV2Adapter:
             except RuntimeLoadError as error:
                 self._runtime_error = str(error)
                 self._runtime_mode = "mock"
-                self._stream_runtime = None
+                self._teardown_runtime()
             except Exception as error:  # pragma: no cover - runtime dependent
                 self._runtime_error = f"runtime inference failed: {error}"
                 self._runtime_mode = "mock"
-                self._stream_runtime = None
+                self._teardown_runtime()
 
         return self._run_mock_stylizer(frame, config, conditioning)
 
@@ -72,6 +88,7 @@ class StreamDiffusionV2Adapter:
         payload: dict[str, str | int | bool | float | None] = {
             "mode": self._runtime_mode,
             "runtime_path": self._runtime_path,
+            "inference_topology": self._runtime_topology,
             "error": self._runtime_error,
         }
         if self._stream_runtime is not None:
@@ -84,7 +101,8 @@ class StreamDiffusionV2Adapter:
         self._runtime_error = None
         self._runtime_mode = "mock"
         self._core_import_ready = False
-        self._stream_runtime = None
+        self._runtime_topology = "single"
+        self._teardown_runtime()
 
         if not core_path.exists():
             self._runtime_error = f"core path not found: {core_path}"
@@ -103,6 +121,17 @@ class StreamDiffusionV2Adapter:
 
         self._core_import_ready = True
         self._runtime_mode = "core-imported"
+
+    def _teardown_runtime(self) -> None:
+        if self._stream_runtime is None:
+            return
+        close = getattr(self._stream_runtime, "close", None)
+        if callable(close):
+            try:
+                close()
+            except Exception:
+                pass
+        self._stream_runtime = None
 
     @staticmethod
     def _resolve_core_path(explicit_path: str | None) -> Path:

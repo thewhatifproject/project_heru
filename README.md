@@ -1,4 +1,4 @@
-# Cam2Inference Console (Unified Fork)
+# Project Heru (Unified Fork)
 
 Single project that combines:
 
@@ -9,7 +9,7 @@ Single project that combines:
 
 - `core/streamdiffusionv2`: upstream core-only subset (WAN causal runtime + streamv2v core)
 - `apps/backend`: FastAPI realtime service (websocket + runtime config)
-- `apps/web`: React/Vite DJ console
+- `apps/web`: React/Vite console UI
 - `docs`: architecture, roadmap, deployment notes
 
 Core provenance and scope are documented in `core/streamdiffusionv2/CORE_MANIFEST.md`.
@@ -57,8 +57,28 @@ Open `http://localhost:5173`.
 - `core-imported`: vendored StreamDiffusionV2 core is importable
 - `core-warmup`: real runtime is active and priming causal cache
 - `core-runtime-active`: real frame inference path is active
+- `core-distributed-warmup`: distributed realtime runtime is active and priming causal cache
+- `core-distributed-active`: distributed realtime frame inference path is active
 
 Runtime status is exposed in websocket payload (`config.current`) and shown in UI.
+
+## Switch single vs multi GPU
+
+Set session config (REST):
+
+```bash
+curl -s -X PUT http://127.0.0.1:8000/api/session/main/config \
+  -H 'Content-Type: application/json' \
+  -d '{"inference_topology":"distributed","distributed_world_size":2}'
+```
+
+Back to single GPU:
+
+```bash
+curl -s -X PUT http://127.0.0.1:8000/api/session/main/config \
+  -H 'Content-Type: application/json' \
+  -d '{"inference_topology":"single"}'
+```
 
 ## H100 Bootstrap (Vast)
 
@@ -72,7 +92,7 @@ cd <repo-root>
 Optional flags:
 
 ```bash
-ENV_NAME=cam2inf PYTHON_VERSION=3.10 DOWNLOAD_WAN_14B=1 ./scripts/setup_h100_runtime.sh
+ENV_NAME=heru PYTHON_VERSION=3.10 DOWNLOAD_WAN_14B=1 ./scripts/setup_h100_runtime.sh
 ```
 
 HF auth (if needed):
