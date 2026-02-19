@@ -2,6 +2,7 @@ import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 
 type Mode = "performance" | "balanced" | "quality";
 type ModelVariant = "wan-1.3b" | "wan-14b";
+type InferenceTopology = "single" | "distributed";
 
 type OutputConfig = {
   preview: boolean;
@@ -15,6 +16,11 @@ type RuntimeConfig = {
   negative_prompt: string;
   mode: Mode;
   model_variant: ModelVariant;
+  inference_topology: InferenceTopology;
+  distributed_world_size: number;
+  distributed_master_addr: string;
+  distributed_master_port: number;
+  distributed_command_timeout_s: number;
   prompt_dominance: number;
   guidance_scale: number;
   inference_steps: number;
@@ -51,6 +57,8 @@ type Conditioning = {
 type RuntimeStatus = {
   mode: string;
   runtime_path: string | null;
+  inference_topology?: string | null;
+  distributed_world_size?: number;
   error: string | null;
 };
 
@@ -64,6 +72,11 @@ const DEFAULT_CONFIG: RuntimeConfig = {
   negative_prompt: "beard, moustache, blur, text, watermark, low quality",
   mode: "balanced",
   model_variant: "wan-1.3b",
+  inference_topology: "single",
+  distributed_world_size: 2,
+  distributed_master_addr: "127.0.0.1",
+  distributed_master_port: 29501,
+  distributed_command_timeout_s: 120,
   prompt_dominance: 0.82,
   guidance_scale: 6.5,
   inference_steps: 2,
@@ -481,6 +494,10 @@ function App() {
               <span>Runtime mode</span>
               <strong>{runtimeStatus.mode}</strong>
             </article>
+            <article>
+              <span>Runtime topology</span>
+              <strong>{runtimeStatus.inference_topology ?? config.inference_topology}</strong>
+            </article>
           </div>
           {runtimeStatus.error ? (
             <p className="runtime-note">Core status: {runtimeStatus.error}</p>
@@ -547,6 +564,93 @@ function App() {
                 <option value="wan-1.3b">Wan 1.3B</option>
                 <option value="wan-14b">Wan 14B</option>
               </select>
+            </label>
+
+            <label>
+              Inference topology
+              <select
+                value={config.inference_topology}
+                onChange={(event) => {
+                  const value = event.target.value as InferenceTopology;
+                  setConfig({ ...config, inference_topology: value });
+                  queueConfigPatch({ inference_topology: value });
+                }}
+              >
+                <option value="single">Single GPU</option>
+                <option value="distributed">Distributed (multi-GPU)</option>
+              </select>
+            </label>
+
+            <label>
+              Distributed world size
+              <input
+                type="number"
+                min={1}
+                max={8}
+                value={config.distributed_world_size}
+                disabled={config.inference_topology !== "distributed"}
+                onChange={(event) => {
+                  const value = Number.parseInt(event.target.value, 10);
+                  if (!Number.isFinite(value)) {
+                    return;
+                  }
+                  setConfig({ ...config, distributed_world_size: value });
+                  queueConfigPatch({ distributed_world_size: value });
+                }}
+              />
+            </label>
+
+            <label>
+              Distributed master addr
+              <input
+                type="text"
+                value={config.distributed_master_addr}
+                disabled={config.inference_topology !== "distributed"}
+                onChange={(event) => {
+                  const value = event.target.value.trim() || "127.0.0.1";
+                  setConfig({ ...config, distributed_master_addr: value });
+                  queueConfigPatch({ distributed_master_addr: value });
+                }}
+              />
+            </label>
+
+            <label>
+              Distributed master port
+              <input
+                type="number"
+                min={1024}
+                max={65535}
+                value={config.distributed_master_port}
+                disabled={config.inference_topology !== "distributed"}
+                onChange={(event) => {
+                  const value = Number.parseInt(event.target.value, 10);
+                  if (!Number.isFinite(value)) {
+                    return;
+                  }
+                  setConfig({ ...config, distributed_master_port: value });
+                  queueConfigPatch({ distributed_master_port: value });
+                }}
+              />
+            </label>
+
+            <label>
+              Distributed timeout (s)
+              <input
+                type="number"
+                min={5}
+                max={600}
+                step={1}
+                value={config.distributed_command_timeout_s}
+                disabled={config.inference_topology !== "distributed"}
+                onChange={(event) => {
+                  const value = Number.parseFloat(event.target.value);
+                  if (!Number.isFinite(value)) {
+                    return;
+                  }
+                  setConfig({ ...config, distributed_command_timeout_s: value });
+                  queueConfigPatch({ distributed_command_timeout_s: value });
+                }}
+              />
             </label>
 
             <label>
