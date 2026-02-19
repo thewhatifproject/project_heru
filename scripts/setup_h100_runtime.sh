@@ -95,6 +95,8 @@ if [[ "$INSTALL_FLASH_ATTN" == "1" ]]; then
   pip install --no-build-isolation --no-deps "flash_attn==${FLASH_ATTN_VERSION}"
 fi
 pip install -r "$CORE_DIR/requirements-runtime.txt"
+# Extra safety for config imports used by WAN base.
+pip install easydict
 
 log "[8/10] Install backend package"
 pip install -e "$BACKEND_DIR"
