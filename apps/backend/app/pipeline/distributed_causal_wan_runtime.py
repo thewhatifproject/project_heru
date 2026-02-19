@@ -115,6 +115,7 @@ def _worker_main(
         from streamv2v.inference_pipe import InferencePipelineManager
 
         dist = dist_mod
+        torch.set_grad_enabled(False)
 
         os.environ["MASTER_ADDR"] = master_addr
         os.environ["MASTER_PORT"] = str(master_port)
@@ -220,35 +221,38 @@ def _worker_main(
             noise_scale = float(command.get("noise_scale", 0.7))
 
             if cmd_type == "prepare":
-                if rank == 0:
-                    frames = np.asarray(command["frames"], dtype=np.uint8)
-                    video_tensor = _frames_to_video_tensor(torch, frames, device)
-                    latents = manager.pipeline.vae.stream_encode(video_tensor)
-                    latents = latents.transpose(2, 1).contiguous().to(dtype=torch.bfloat16)
-                    noise = torch.randn_like(latents)
-                    noisy_latents = noise * noise_scale + latents * (1.0 - noise_scale)
-                    shape_tensor = torch.tensor(noisy_latents.shape, dtype=torch.int64, device=device)
-                else:
-                    shape_tensor = torch.zeros(5, dtype=torch.int64, device=device)
-                    noisy_latents = None
+                with torch.inference_mode():
+                    if rank == 0:
+                        frames = np.asarray(command["frames"], dtype=np.uint8)
+                        video_tensor = _frames_to_video_tensor(torch, frames, device)
+                        latents = manager.pipeline.vae.stream_encode(video_tensor)
+                        latents = latents.transpose(2, 1).contiguous().to(dtype=torch.bfloat16)
+                        noise = torch.randn_like(latents)
+                        noisy_latents = noise * noise_scale + latents * (1.0 - noise_scale)
+                        shape_tensor = torch.tensor(noisy_latents.shape, dtype=torch.int64, device=device)
+                    else:
+                        shape_tensor = torch.zeros(5, dtype=torch.int64, device=device)
+                        noisy_latents = None
 
-                dist.broadcast(shape_tensor, src=0)
-                if rank != 0:
-                    noisy_latents = torch.zeros(tuple(shape_tensor.tolist()), dtype=torch.bfloat16, device=device)
-                dist.broadcast(noisy_latents, src=0)
+                    dist.broadcast(shape_tensor, src=0)
+                    if rank != 0:
+                        noisy_latents = torch.zeros(
+                            tuple(shape_tensor.tolist()), dtype=torch.bfloat16, device=device
+                        )
+                    dist.broadcast(noisy_latents, src=0)
 
-                denoised_pred = manager.prepare_pipeline(
-                    text_prompts=[prompt_value],
-                    noise=noisy_latents,
-                    block_mode=block_mode,
-                    current_start=current_start,
-                    current_end=current_end,
-                    block_num=block_num[rank],
-                )
+                    denoised_pred = manager.prepare_pipeline(
+                        text_prompts=[prompt_value],
+                        noise=noisy_latents,
+                        block_mode=block_mode,
+                        current_start=current_start,
+                        current_end=current_end,
+                        block_num=block_num[rank],
+                    )
 
-                if rank == world_size - 1:
-                    out_np = _decode_last_frame_to_np(torch, manager.pipeline, denoised_pred)
-                    result_queue.put({"type": "frame", "cmd_id": cmd_id, "frame": out_np})
+                    if rank == world_size - 1:
+                        out_np = _decode_last_frame_to_np(torch, manager.pipeline, denoised_pred)
+                        result_queue.put({"type": "frame", "cmd_id": cmd_id, "frame": out_np})
 
                 current_start = current_end
                 current_end = current_end + (chunk_size // 4) * frame_seq
@@ -263,76 +267,77 @@ def _worker_main(
             current_step = int(noise_scale * 1000.0) - 100
             current_step = max(step_min, min(step_max, current_step))
 
-            if rank == 0:
-                frames = np.asarray(command["frames"], dtype=np.uint8)
-                video_tensor = _frames_to_video_tensor(torch, frames, device)
-                latents = manager.pipeline.vae.stream_encode(video_tensor)
-                latents = latents.transpose(2, 1).contiguous().to(dtype=torch.bfloat16)
-                noise = torch.randn_like(latents)
-                noisy_latents = noise * noise_scale + latents * (1.0 - noise_scale)
+            with torch.inference_mode():
+                if rank == 0:
+                    frames = np.asarray(command["frames"], dtype=np.uint8)
+                    video_tensor = _frames_to_video_tensor(torch, frames, device)
+                    latents = manager.pipeline.vae.stream_encode(video_tensor)
+                    latents = latents.transpose(2, 1).contiguous().to(dtype=torch.bfloat16)
+                    noise = torch.randn_like(latents)
+                    noisy_latents = noise * noise_scale + latents * (1.0 - noise_scale)
 
-                denoised_pred, patched_x_shape = manager.pipeline.inference(
-                    noise=noisy_latents,
-                    current_start=current_start,
-                    current_end=current_end,
-                    current_step=current_step,
-                    block_mode="input",
-                    block_num=block_num[rank],
-                )
+                    denoised_pred, patched_x_shape = manager.pipeline.inference(
+                        noise=noisy_latents,
+                        current_start=current_start,
+                        current_end=current_end,
+                        current_step=current_step,
+                        block_mode="input",
+                        block_num=block_num[rank],
+                    )
 
-                work_objects = manager.data_transfer.send_latent_data_async(
-                    chunk_idx=cmd_id,
-                    latents=denoised_pred,
-                    original_latents=manager.pipeline.hidden_states,
-                    patched_x_shape=patched_x_shape,
-                    current_start=manager.pipeline.kv_cache_starts,
-                    current_end=manager.pipeline.kv_cache_ends,
-                    current_step=current_step,
-                )
-                for work in work_objects:
-                    work.wait()
+                    work_objects = manager.data_transfer.send_latent_data_async(
+                        chunk_idx=cmd_id,
+                        latents=denoised_pred,
+                        original_latents=manager.pipeline.hidden_states,
+                        patched_x_shape=patched_x_shape,
+                        current_start=manager.pipeline.kv_cache_starts,
+                        current_end=manager.pipeline.kv_cache_ends,
+                        current_step=current_step,
+                    )
+                    for work in work_objects:
+                        work.wait()
 
-            elif rank == world_size - 1:
-                latent_data = manager.data_transfer.receive_latent_data_async(num_steps)
-                denoised_pred, _ = manager.pipeline.inference(
-                    noise=latent_data.original_latents,
-                    current_start=latent_data.current_start,
-                    current_end=latent_data.current_end,
-                    current_step=latent_data.current_step,
-                    block_mode="output",
-                    block_num=block_num[rank],
-                    patched_x_shape=latent_data.patched_x_shape,
-                    block_x=latent_data.latents,
-                )
+                elif rank == world_size - 1:
+                    latent_data = manager.data_transfer.receive_latent_data_async(num_steps)
+                    denoised_pred, _ = manager.pipeline.inference(
+                        noise=latent_data.original_latents,
+                        current_start=latent_data.current_start,
+                        current_end=latent_data.current_end,
+                        current_step=latent_data.current_step,
+                        block_mode="output",
+                        block_num=block_num[rank],
+                        patched_x_shape=latent_data.patched_x_shape,
+                        block_x=latent_data.latents,
+                    )
 
-                out_np = _decode_last_frame_to_np(torch, manager.pipeline, denoised_pred[[-1]])
-                result_queue.put({"type": "frame", "cmd_id": cmd_id, "frame": out_np})
-                _release_latent_buffers(manager, latent_data)
+                    out_np = _decode_last_frame_to_np(torch, manager.pipeline, denoised_pred[[-1]])
+                    result_queue.put({"type": "frame", "cmd_id": cmd_id, "frame": out_np})
+                    _release_latent_buffers(manager, latent_data)
 
-            else:
-                latent_data = manager.data_transfer.receive_latent_data_async(num_steps)
-                denoised_pred, _ = manager.pipeline.inference(
-                    noise=latent_data.original_latents,
-                    current_start=latent_data.current_start,
-                    current_end=latent_data.current_end,
-                    current_step=latent_data.current_step,
-                    block_mode="middle",
-                    block_num=block_num[rank],
-                    patched_x_shape=latent_data.patched_x_shape,
-                    block_x=latent_data.latents,
-                )
-                work_objects = manager.data_transfer.send_latent_data_async(
-                    chunk_idx=latent_data.chunk_idx,
-                    latents=denoised_pred,
-                    original_latents=latent_data.original_latents,
-                    patched_x_shape=latent_data.patched_x_shape,
-                    current_start=latent_data.current_start,
-                    current_end=latent_data.current_end,
-                    current_step=latent_data.current_step,
-                )
-                for work in work_objects:
-                    work.wait()
-                _release_latent_buffers(manager, latent_data)
+                else:
+                    latent_data = manager.data_transfer.receive_latent_data_async(num_steps)
+                    denoised_pred, _ = manager.pipeline.inference(
+                        noise=latent_data.original_latents,
+                        current_start=latent_data.current_start,
+                        current_end=latent_data.current_end,
+                        current_step=latent_data.current_step,
+                        block_mode="middle",
+                        block_num=block_num[rank],
+                        patched_x_shape=latent_data.patched_x_shape,
+                        block_x=latent_data.latents,
+                    )
+                    work_objects = manager.data_transfer.send_latent_data_async(
+                        chunk_idx=latent_data.chunk_idx,
+                        latents=denoised_pred,
+                        original_latents=latent_data.original_latents,
+                        patched_x_shape=latent_data.patched_x_shape,
+                        current_start=latent_data.current_start,
+                        current_end=latent_data.current_end,
+                        current_step=latent_data.current_step,
+                    )
+                    for work in work_objects:
+                        work.wait()
+                    _release_latent_buffers(manager, latent_data)
 
             current_start = current_end
             current_end = current_end + (chunk_size // 4) * frame_seq
