@@ -5,7 +5,7 @@ This guide validates the unified repository end-to-end on a remote H100.
 ## 0) Connect to your Vast instance
 
 ```bash
-ssh <your-vast-instance>
+ssh -p <SSH_PORT> <SSH_USER>@<SSH_HOST>
 ```
 
 ## 1) Clone repo and run bootstrap
@@ -13,7 +13,7 @@ ssh <your-vast-instance>
 ```bash
 git clone <your-fork-url> cam2inference
 cd cam2inference
-HF_TOKEN=hf_xxx ./scripts/setup_h100_runtime.sh
+./scripts/setup_h100_runtime.sh
 ```
 
 Notes:
@@ -71,6 +71,14 @@ VITE_WS_BASE=ws://127.0.0.1:8000/ws/session npm run dev -- --host 0.0.0.0 --port
 ```
 
 Open your tunnel/public URL and start streaming.
+
+## 6) Recommended: local webcam + SSH tunnel (no public exposure)
+
+For webcam workflows, use local browser UI with a tunnel to remote backend.
+
+See the dedicated runbook:
+
+- `docs/SSH_TUNNEL_RUNBOOK.md`
 
 ## Troubleshooting quick map
 

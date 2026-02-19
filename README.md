@@ -65,7 +65,7 @@ Runtime status is exposed in websocket payload (`config.current`) and shown in U
 For a clean runtime setup on a remote Linux GPU:
 
 ```bash
-cd /Users/danielegiannini/Documents/New project
+cd <repo-root>
 ./scripts/setup_h100_runtime.sh
 ```
 
@@ -83,7 +83,8 @@ HF_TOKEN=hf_xxx ./scripts/setup_h100_runtime.sh
 
 Guided validation checklist:
 
-- `/Users/danielegiannini/Documents/New project/docs/H100_GUIDED_TEST.md`
+- `docs/H100_GUIDED_TEST.md`
+- `docs/SSH_TUNNEL_RUNBOOK.md` (recommended flow for local webcam + remote backend)
 
 ## Status
 

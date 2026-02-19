@@ -19,12 +19,12 @@
 ## Quick bootstrap
 
 ```bash
-cd /Users/danielegiannini/Documents/New project
+cd <repo-root>
 ./scripts/setup_h100_runtime.sh
 
 conda activate cam2inf
-export STREAMDIFFUSIONV2_PATH=/Users/danielegiannini/Documents/New project/core/streamdiffusionv2
-cd /Users/danielegiannini/Documents/New project/apps/backend
+export STREAMDIFFUSIONV2_PATH=<repo-root>/core/streamdiffusionv2
+cd <repo-root>/apps/backend
 python -m app.main
 ```
 
