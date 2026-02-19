@@ -1,0 +1,32 @@
+[project]
+name = "cam2inference-backend"
+version = "0.1.0"
+description = "Realtime camera-to-inference backend with StreamDiffusionV2 adapter"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+  "fastapi>=0.116.0",
+  "uvicorn[standard]>=0.30.0",
+  "pydantic>=2.10.0",
+  "pillow>=10.4.0",
+  "numpy>=2.1.0",
+  "python-dotenv>=1.0.1"
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.3.0",
+  "ruff>=0.8.0"
+]
+
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
